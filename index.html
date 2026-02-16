@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Raptor Orbit: RELICS EDITION + TOXIC</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; color: white; }
+        canvas { display: block; }
+        #hud { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; pointer-events: none; z-index: 5; }
+        .panel { background: rgba(0, 15, 30, 0.9); border-left: 4px solid #0ff; padding: 15px; min-width: 260px; pointer-events: auto; }
+        #live-zeks { background: rgba(30, 0, 30, 0.9); border-right: 4px solid #f0f; padding: 15px; min-width: 150px; text-align: right; box-shadow: -5px 0 15px rgba(255, 0, 255, 0.2); }
+        .zeks-label { color: #f0f; font-size: 10px; display: block; margin-bottom: 2px; }
+        .zeks-amount { color: #fff; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px #f0f; }
+        .bar-bg { width: 100%; height: 10px; background: #222; border: 1px solid #333; margin-top: 8px; position: relative; }
+        #hp-bar { width: 100%; height: 100%; background: #0f0; transition: width 0.3s; }
+        #skill-bar-fill { width: 0%; height: 100%; background: #ff0; transition: width 0.1s; }
+        .skill-ready { animation: blink-blue 0.6s infinite alternate; background: #00f !important; box-shadow: 0 0 10px #00f; }
+        @keyframes blink-blue { from { opacity: 1; } to { opacity: 0.4; } }
+        .status-box { margin-top: 10px; padding: 8px; border: 1px solid #0ff; background: rgba(0,255,255,0.1); font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
+        #shop { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,5,10,0.95); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 50; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { padding: 10px 20px; background: #033; border: 1px solid #0ff; color: #0ff; cursor: pointer; font-weight: bold; }
+        .tab-btn.active { background: #0ff; color: #000; }
+        .shop-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; max-width: 900px; max-height: 80vh; overflow-y: auto; padding: 20px; }
+        .item { background: rgba(0,20,40,0.8); border: 2px solid #0ff; padding: 15px; text-align: center; width: 280px; position: relative; }
+        .preview-img { width: 80px; height: 80px; margin: 10px auto; background-size: cover; background-repeat: no-repeat; background-position: center; border: 1px solid #444; }
+        .btn { padding: 10px; background: #0ff; border: none; color: #000; font-weight: bold; cursor: pointer; margin-top: 10px; width: 100%; }
+        .btn:active { background: #fff; }
+        .btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+        #wave-info { position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; z-index: 10; width: 100%; }
+        #intermission-timer { display: none; background: rgba(0,0,0,0.5); padding: 20px; border-radius: 10px; }
+        .timer-val { font-size: 64px; color: #fff; text-shadow: 0 0 20px #0ff; display: block; }
+        #game-over { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(30, 0, 0, 0.95); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
+        .relic-tag { color: #f0f; font-size: 10px; position: absolute; top: 5px; right: 5px; font-weight: bold; }
+    </style>
+</head>
+<!-- ===== MENU LOGROS ===== -->
+<div id="achievements" style="
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,20,0.97);
+display:none;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+z-index:9999;
+font-family:Courier New;
+color:white;
+pointer-events:auto;
+">
+
+<h1 style="color:#0ff;text-shadow:0 0 15px #0ff;">LOGROS</h1>
+
+<div style="border:2px solid #0ff;padding:15px;margin:10px;width:300px;text-align:center;">
+🛡 Sobrevive 5 rondas
+</div>
+
+<div style="border:2px solid #0ff;padding:15px;margin:10px;width:300px;text-align:center;">
+💀 Derrota a Boss Silk
+</div>
+
+<div style="border:2px solid #0ff;padding:15px;margin:10px;width:300px;text-align:center;">
+❄ Derrota a Boss Rexo
+</div>
+
+<div style="border:2px solid #0ff;padding:15px;margin:10px;width:300px;text-align:center;">
+💰 Consigue 5000 Zeks
+</div>
+
+<button onclick="toggleAchievements()" style="
+margin-top:30px;
+padding:10px 25px;
+background:#f0f;
+border:none;
+color:white;
+font-weight:bold;
+cursor:pointer;">
+CERRAR
+</button>
+
+</div>
+
+<body>
+
+<div id="hud">
+    <div class="panel">
+        <span id="ship-name" style="color:#0ff; font-weight:bold;">RAPTOR MK-I</span>
+        <div class="bar-bg"><div id="hp-bar"></div></div>
+        <div style="margin-top: 10px;">
+            <div style="font-size:11px; color:#aaa;">HABILIDAD [Q]</div>
+            <div class="bar-bg" style="height: 6px;"><div id="skill-bar-fill"></div></div>
+        </div>
+        <div class="status-box">
+            <span>ESTADO: <b id="status-text" style="color:#0ff;">NORMAL</b></span>
+            <span id="repair-tag" style="color:#0f0; font-size:10px; display:none;">REPARANDO</span>
+        </div>
+        <div style="margin-top: 10px; font-size:11px; color: #0ff;">RONDA ACTUAL: <span id="round-num">1</span></div>
+        <div id="relics-active" style="margin-top: 5px; font-size: 9px; color: #f0f;"></div>
+    </div>
+    <div id="live-zeks">
+        <span class="zeks-label">CRÉDITOS ZEKS</span>
+        <span id="live-zeks-val" class="zeks-amount">0</span>
+        <div style="font-size:10px; color:#aaa; margin-top:5px;">PULSA [P] TIENDA</div>
+    </div>
+</div>
+
+<div id="shop">
+    <h1 style="color:#0ff; text-shadow: 0 0 10px #0ff;">ESTACIÓN DE MEJORAS</h1>
+    <h2 id="shop-zeks" style="color:#ff0; margin-bottom: 20px;">ZEKS: 0</h2>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('ships')">NAVES</button>
+        <button class="tab-btn" onclick="switchTab('modules')">MÓDULOS / HP</button>
+        <button class="tab-btn" onclick="switchTab('relics')">RELIQUIAS</button>
+    </div>
+    
+    <div id="tab-ships" class="shop-grid">
+        <div class="item"><h3>TITAN</h3><div class="preview-img" style="background-image: url('titan.png')"></div><p style="font-size: 12px;">HP: 2500 | Fuego Circular</p><button class="btn" onclick="buyShip('titan', 800)">800 Z</button></div>
+        <div class="item"><h3>ZARI</h3><div class="preview-img" style="background-image: url('zari.png')"></div><p style="font-size: 12px;">HP: 1500 | Rayo Energía</p><button class="btn" onclick="buyShip('zari', 1000)">1000 Z</button></div>
+        <div class="item"><h3>ALIAX</h3><div class="preview-img" style="background-image: url('aliax.png')"></div><p style="font-size: 12px;">HP: 1500 | Salva Misiles</p><button class="btn" onclick="buyShip('aliax', 1200)">1200 Z</button></div>
+    </div>
+
+    <div id="tab-modules" class="shop-grid" style="display:none;">
+    <div class="item">
+        <h3>NANO-BOT</h3>
+        <div class="preview-img" style="background-image: url('curacion.png')"></div>
+        <p style="font-size: 12px;">Auto-reparación pasiva lenta.</p>
+        <button class="btn" onclick="buyImprove('bot', 400)">400 Z</button>
+    </div>
+
+    <div class="item">
+        <h3>NÚCLEO HPZ</h3>
+        <div class="preview-img" style="background-image: url('escudoHPZ.png')"></div>
+        <p style="font-size: 12px;">+300 Vida Máxima</p>
+        <button class="btn" onclick="buyImprove('hpz', 300)">300 Z</button>
+    </div>
+
+    <div class="item">
+        <h3>NÚCLEO HPZD</h3>
+        <div class="preview-img" style="background-image: url('escudoHPZD.png')"></div>
+        <p style="font-size: 12px;">+500 Vida Máxima</p>
+        <button class="btn" onclick="buyImprove('hpzd', 500)">500 Z</button>
+    </div>
+
+    <div class="item">
+        <h3>NÚCLEO HPX</h3>
+        <div class="preview-img" style="background-image: url('escudoHPX.png')"></div>
+        <p style="font-size: 12px;">+800 Vida Máxima</p>
+        <button class="btn" onclick="buyImprove('hpx', 800)">800 Z</button>
+    </div>
+</div>
+
+
+    <div id="tab-relics" class="shop-grid" style="display:none;">
+        <div class="item">
+            <span class="relic-tag">LEGENDARIO</span>
+            <h3>BALAS DE SILK</h3>
+            <div class="preview-img" style="background-image: url('balas.png')"></div>
+            <p style="font-size: 11px;">Cada 5s: Dispara un abanico de 7 balas pesadas.</p>
+            <button id="btn-relic-silk" class="btn" onclick="buyRelic('silk', 5000)">5000 Z</button>
+        </div>
+        <div class="item">
+            <span class="relic-tag">LEGENDARIO</span>
+            <h3>ESFERA DE REXO</h3>
+            <div class="preview-img" style="background-image: url('blanca.png')"></div>
+            <p style="font-size: 11px;">Cada 10s: Lanza orbe de energía que congela y daña.</p>
+            <button id="btn-relic-rexo" class="btn" onclick="buyRelic('rexo', 7000)">7000 Z</button>
+        </div>
+    </div>
+
+    <button class="btn" style="margin-top:30px; width:200px; background:#f0f; color:#fff;" onclick="toggleShop()">CERRAR</button>
+</div>
+
+<div id="wave-info">
+    <h1 id="wave-title" style="color:#f0f; text-shadow: 0 0 20px #f0f; display:none;">¡BOSS DETECTADO!</h1>
+    <div id="intermission-timer">
+        <span style="color:#0ff; font-size: 14px; letter-spacing: 2px;">SIGUIENTE RONDA EN</span>
+        <span id="timer-count" class="timer-val">15</span>
+    </div>
+</div>
+
+<div id="game-over">
+    <h1 style="font-size: 50px; color: #f00;">RAPTOR DESTRUIDA</h1>
+    <button class="btn" onclick="location.reload()">REINTENTAR</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+let achievementsOpen = false;
+
+function toggleAchievements(){
+    achievementsOpen = !achievementsOpen;
+    document.getElementById("achievements").style.display = achievementsOpen ? "flex" : "none";
+}
+
+window.addEventListener("keydown", function(e){
+    if(e.key.toLowerCase() === "l"){
+        toggleAchievements();
+    }
+});
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+const IMGS = {};
+['raptor','silk','rexo','hielo','cupula','curacion','fuego','energia','misil','titan','zari','aliax','escudoHPZ','escudoHPZD','escudoHPX','balas','blanca','toxico','bomba','polvo'].forEach(n => {
+    IMGS[n] = new Image(); 
+    IMGS[n].src = n + '.png';
+});
+
+let isGameOver = false, inShop = false, isIntermission = false;
+let intermissionSecs = 15;
+let enemies = [], pLasers = [], eLasers = [], trail = [], specials = [], particles = [], bombs = [], clouds = [];
+let titanRing = null; // efecto visual del anillo
+let zeks = 0, round = 1;
+
+let relics = {
+    silk: { owned: false, lastUse: 0, interval: 5000 },
+    rexo: { owned: false, lastUse: 0, interval: 10000 }
+};
+
+const COOLDOWN = 15000; 
+let skillSoundPlayed = false;
+
+function playReadySound() {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const duration = 3.0; 
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(880, audioCtx.currentTime + duration);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+}
+
+function playSkillSound() {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const duration = 2.0; 
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(110, audioCtx.currentTime + duration);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+}
+
+let isFiringBurst = false;
+
+let player = {
+    type: 'raptor', x: canvas.width/2, y: canvas.height-150, tx: canvas.width/2, ty: canvas.height-150, 
+    hp: 1000, max: 1000, angle: -Math.PI/2,
+    isInvincible: false, lastSkill: -COOLDOWN, 
+    isFrozen: false, frozenUntil: 0,
+    hasBot: false, lastHit: 0,
+    poisonedUntil: 0, lastPoisonTick: 0,
+    skillActive: false
+};
+
+function createSpark(x, y, color = '#ff0') {
+    for(let i=0; i<5; i++) {
+        particles.push({x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1, color});
+    }
+}
+
+function fireBurst(count) {
+    if (count <= 0 || player.isFrozen || isGameOver) { isFiringBurst = false; return; }
+    pLasers.push({x: player.x, y: player.y, a: player.angle, type: 'normal'});
+    setTimeout(() => fireBurst(count - 1), 80);
+}
+
+window.addEventListener('keydown', e => {
+    if(isGameOver) return;
+    if(e.code === 'KeyP') toggleShop();
+    if(inShop) return;
+    if(e.code === 'Space' && !player.isFrozen && !isFiringBurst) { isFiringBurst = true; fireBurst(8); }
+    if(e.key.toLowerCase() === 'q') useSkill();
+});
+
+canvas.addEventListener('mousedown', e => { 
+    if(!isGameOver && !player.isFrozen && !inShop){ player.tx = e.clientX; player.ty = e.clientY; }
+});
+
+function toggleShop() {
+    inShop = !inShop;
+    document.getElementById('shop').style.display = inShop ? 'flex' : 'none';
+    updateUI();
+}
+
+function switchTab(tab) {
+    document.getElementById('tab-ships').style.display = tab === 'ships' ? 'grid' : 'none';
+    document.getElementById('tab-modules').style.display = tab === 'modules' ? 'grid' : 'none';
+    document.getElementById('tab-relics').style.display = tab === 'relics' ? 'grid' : 'none';
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+}
+
+function buyShip(type, cost) {
+    if(zeks >= cost) {
+        zeks -= cost; player.type = type;
+        player.max = (type === 'titan') ? 2500 : 1500;
+        player.hp = player.max;
+        document.getElementById('ship-name').innerText = type.toUpperCase();
+        updateUI();
+    }
+}
+
+function buyImprove(item, cost) {
+    if(zeks >= cost) {
+        if(item === 'bot') { zeks -= cost; player.hasBot = true; }
+        else if(item === 'hpz') { zeks -= cost; player.max += 300; }
+        else if(item === 'hpzd') { zeks -= cost; player.max += 500; }
+        else if(item === 'hpx') { zeks -= cost; player.max += 800; }
+        updateUI();
+    }
+}
+
+function buyRelic(type, cost) {
+    if(zeks >= cost && !relics[type].owned) {
+        zeks -= cost;
+        relics[type].owned = true;
+        relics[type].lastUse = Date.now();
+        document.getElementById('btn-relic-' + type).innerText = "ADQUIRIDO";
+        document.getElementById('btn-relic-' + type).disabled = true;
+        updateUI();
+    }
+}
+
+// --- HABILIDADES DE LAS NAVES ---
+function useSkill() {
+    if(Date.now() - player.lastSkill < COOLDOWN || player.isFrozen) return;
+    player.lastSkill = Date.now();
+    playSkillSound();
+
+    if(player.type === 'raptor') { 
+        player.isInvincible = true; 
+        setTimeout(() => player.isInvincible = false, 5000); 
+    }
+    else if(player.type === 'titan') { 
+    // Mantiene disparo original
+    //for(let i=0; i<24; i++) {
+    //  pLasers.push({x: player.x, y: player.y, a: (Math.PI*2/24)*i, type: 'normal'});
+   // }
+
+    // Añade anillo visual de fuego (solo efecto)
+    titanRing = {
+        start: Date.now(),
+        duration: 3000,
+        radius: 230
+    };
+}
+
+    else if(player.type === 'zari') { 
+        // ZARI: Rayo de Energía (Un especial que limpia frente a la nave)
+        specials.push({type: 'ray', x: player.x, y: player.y, angle: player.angle, life: 120}); 
+    }
+    else if(player.type === 'aliax') { 
+        // ALIAX: Salva de Misiles inteligentes (Homing)
+        for(let i=0; i<12; i++) {
+            let target = enemies.length > 0 ? enemies[Math.floor(Math.random()*enemies.length)] : null;
+            specials.push({type: 'missile', x: player.x, y: player.y, a: (Math.PI*2/12)*i, target: target, life: 200});
+        }
+    }
+}
+
+function startIntermission() {
+    isIntermission = true; intermissionSecs = 15;
+    document.getElementById('intermission-timer').style.display = 'block';
+    let countdown = setInterval(() => {
+        intermissionSecs--;
+        document.getElementById('timer-count').innerText = intermissionSecs;
+        if (intermissionSecs <= 0 || isGameOver) {
+            clearInterval(countdown);
+            document.getElementById('intermission-timer').style.display = 'none';
+            isIntermission = false; round++; spawnWave();
+        }
+    }, 1000);
+}
+
+function spawnWave() {
+    enemies = [];
+    let isBossRexo = round % 7 === 0;
+    let isBossSilk = round % 3 === 0 && !isBossRexo;
+    let hasToxic = round % 2 === 0 && !isBossRexo && !isBossSilk;
+
+    if(isBossRexo) {
+        document.getElementById('wave-title').innerText = "¡BOSS REXO!";
+        document.getElementById('wave-title').style.display = 'block';
+        let bossCount = Math.floor(round / 7);
+        let lifeRexo = 10000 + (round * 500) + (bossCount * 600);
+        enemies.push({ x: canvas.width / 2, y: -250, hp: lifeRexo, max: lifeRexo, size: 350, angle: 0, lastShot: 0, lastCryo: Date.now(), type: 'bossRexo', iceShield: false });
+        setTimeout(() => document.getElementById('wave-title').style.display = 'none', 3000);
+    } else if(isBossSilk) {
+        document.getElementById('wave-title').innerText = "¡BOSS SILK!";
+        document.getElementById('wave-title').style.display = 'block';
+        let bossCount = Math.floor(round / 3);
+        let lifeSilk = 1200 + ((bossCount - 1) * 800) + (bossCount * 600);
+        enemies.push({ x: canvas.width / 2, y: -200, hp: lifeSilk, max: lifeSilk, size: 250, angle: 0, lastShot: 0, lastFan: Date.now(), type: 'bossSilk' });
+        setTimeout(() => document.getElementById('wave-title').style.display = 'none', 3000);
+    } else {
+        if(hasToxic) {
+            // NPC TOXICO: Escudo escala con la ronda (+30 por ronda)
+            let currentShield = 100 + (round * 30);
+            enemies.push({ x: Math.random()*canvas.width, y: -100, hp: 600, max: 600, shield: currentShield, maxShield: currentShield, size: 90, type: 'toxico', angle: 0, lastBomb: Date.now()+2000 });
+        }
+        for(let i=0; i<3+round; i++) {
+            enemies.push({ x: Math.random()*canvas.width, y: -100-(i*150), hp: 300, max: 300, size: 80, type: Math.random() > 0.5 ? 'silk' : 'rexo', angle: 0, lastShot: Date.now() + Math.random()*2000, lastCryo: Date.now() + Math.random()*5000 });
+        }
+    }
+    document.getElementById('round-num').innerText = round;
+}
+
+    let shieldRotation = 0;
+
+    function update() {
+    shieldRotation += 0.04;
+    if(isGameOver || inShop || achievementsOpen) return;
+    
+
+
+    // --- ACTUALIZACION DE SPECIALS (MISILES/RAYOS) ---
+    specials.forEach((s, i) => {
+        if(s.type === 'missile') {
+            if(s.target && s.target.hp > 0) {
+                let targetA = Math.atan2(s.target.y - s.y, s.target.x - s.x);
+                let diff = targetA - s.a;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                s.a += diff * 0.1;
+            }
+            s.x += Math.cos(s.a) * 8;
+            s.y += Math.sin(s.a) * 8;
+            s.life--;
+            enemies.forEach(e => {
+                if(Math.hypot(s.x-e.x, s.y-e.y) < e.size/2) {
+                    e.hp -= 200;
+                    createSpark(s.x, s.y, '#f00');
+                    s.life = 0;
+                }
+            });
+            if(s.life <= 0) specials.splice(i, 1);
+        }
+        if(s.type === 'ray') {
+            s.x = player.x; s.y = player.y; // Sigue al jugador
+            s.life--;
+            enemies.forEach(e => {
+                let dist = Math.hypot(e.x - s.x, e.y - s.y);
+                let angleToEnemy = Math.atan2(e.y - s.y, e.x - s.x);
+                if(dist < 600 && Math.abs(angleToEnemy - s.angle) < 0.3) {
+                    e.hp -= 15; // Daño por frame
+                }
+            });
+            if(s.life <= 0) specials.splice(i, 1);
+        }
+    });
+
+    if(Date.now() < player.poisonedUntil) {
+        if(Date.now() - player.lastPoisonTick > 3000) {
+            player.hp -= 100;
+            player.lastPoisonTick = Date.now();
+            createSpark(player.x, player.y, '#0f0');
+        }
+        document.getElementById('status-text').innerText = "ENVENENADO";
+        document.getElementById('status-text').style.color = "#0f0";
+    } else if(!player.isFrozen) {
+        document.getElementById('status-text').innerText = "NORMAL";
+        document.getElementById('status-text').style.color = "#0ff";
+    }
+
+    if(relics.silk.owned && Date.now() - relics.silk.lastUse > relics.silk.interval) {
+        for(let i = -3; i <= 3; i++) pLasers.push({x: player.x, y: player.y, a: player.angle + (i * 0.2), type: 'relic-silk'});
+        relics.silk.lastUse = Date.now();
+        createSpark(player.x, player.y, '#f0f');
+    }
+
+    if(relics.rexo.owned && Date.now() - relics.rexo.lastUse > relics.rexo.interval) {
+        if (enemies.length > 0) {
+            pLasers.push({ x: player.x, y: player.y, a: player.angle, type: 'relic-rexo', target: enemies[0] });
+            relics.rexo.lastUse = Date.now();
+            createSpark(player.x, player.y, '#0ff');
+        }
+    }
+
+    if(player.hasBot && Date.now() - player.lastHit > 3000 && player.hp < player.max) {
+        player.hp += 0.5;
+        document.getElementById('repair-tag').style.display = 'inline';
+    } else { document.getElementById('repair-tag').style.display = 'none'; }
+
+    if(player.isFrozen && Date.now() > player.frozenUntil) player.isFrozen = false;
+
+    if(!player.isFrozen) {
+        const dx = player.tx - player.x, dy = player.ty - player.y;
+        if(Math.hypot(dx, dy) > 5) { 
+            player.angle = Math.atan2(dy, dx); 
+            player.x += Math.cos(player.angle)*7; player.y += Math.sin(player.angle)*7; 
+            trail.push({ x: player.x, y: player.y, life: 1.0 });
+        }
+    }
+    for(let i = trail.length-1; i>=0; i--) { trail[i].life -= 0.05; if(trail[i].life <= 0) trail.splice(i, 1); }
+
+    enemies.forEach((e) => {
+        e.angle = Math.atan2(player.y - e.y, player.x - e.x);
+        let speed = (e.type.includes('boss')) ? 1.1 : (e.type === 'silk' ? 3 : 1.5);
+        if(e.type === 'toxico') speed = 2;
+        e.x += Math.cos(e.angle) * speed; e.y += Math.sin(e.angle) * speed;
+        if(e.type === 'bossRexo' && e.hp < e.max * 0.5) e.iceShield = true;
+        if(e.type === 'toxico' && Date.now() - e.lastBomb > 5000) {
+            bombs.push({ x: player.x, y: player.y, timer: Date.now() + 3000, exploded: false });
+            e.lastBomb = Date.now();
+        }
+        if(Date.now() - e.lastShot > 2000 && e.type !== 'toxico') {
+            let bulletType = e.type === 'silk' ? 'silk-red' : (e.type === 'bossSilk' ? 'boss-perdigon' : (e.type === 'bossRexo' ? 'boss-rexo-red' : 'rexo-sphere-red'));
+            eLasers.push({x: e.x, y: e.y, a: e.angle, type: bulletType});
+            e.lastShot = Date.now();
+        }
+        if((e.type === 'rexo' || e.type === 'bossRexo') && Date.now() - e.lastCryo > 8000) {
+            eLasers.push({x: e.x, y: e.y, a: e.angle, type: 'cryo-homing', life: 300});
+            e.lastCryo = Date.now();
+        }
+        if(e.type === 'bossSilk' && Date.now() - e.lastFan > 6000) {
+            for(let i = -8; i <= 8; i++) eLasers.push({x: e.x, y: e.y, a: e.angle + (i * 0.12), type: 'boss-perdigon'});
+            e.lastFan = Date.now();
+        }
+    });
+
+    bombs.forEach((b, i) => {
+        if(!b.exploded && Date.now() > b.timer) {
+            b.exploded = true;
+            clouds.push({ x: b.x, y: b.y, size: 10, maxRes: 250, life: Date.now() + 4000 });
+            bombs.splice(i, 1);
+        }
+    });
+
+    clouds.forEach((c, i) => {
+        if(c.size < c.maxRes) c.size += 10;
+        if(Math.hypot(player.x - c.x, player.y - c.y) < c.size/2 && !player.isInvincible) player.poisonedUntil = Date.now() + 10000;
+        if(Date.now() > c.life) clouds.splice(i, 1);
+    });
+
+    eLasers.forEach((l, i) => {
+        if(l.type === 'cryo-homing') {
+            let targetA = Math.atan2(player.y - l.y, player.x - l.x);
+            let diff = targetA - l.a;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            l.a += diff * 0.05; l.life--;
+            if(l.life <= 0) eLasers.splice(i, 1);
+        }
+        let lSpeed = (l.type.includes('perdigon')) ? 10 : 6; 
+        l.x += Math.cos(l.a)*lSpeed; l.y += Math.sin(l.a)*lSpeed;
+        if(Math.hypot(l.x-player.x, l.y-player.y) < 35) {
+            if(!player.isInvincible) {
+                if(l.type.includes('cryo')) {
+                    player.isFrozen = true; player.frozenUntil = Date.now() + 800;
+                    player.hp -= 400;
+                } else player.hp -= 120;
+                player.lastHit = Date.now();
+            }
+            eLasers.splice(i, 1);
+        }
+    });
+
+    pLasers.forEach((l, i) => {
+        let lSpd = (l.type === 'relic-rexo') ? 7 : 15;
+        if (l.type === 'relic-rexo' && enemies.length > 0) {
+            if (!enemies.includes(l.target)) l.target = enemies[0];
+            let targetA = Math.atan2(l.target.y - l.y, l.target.x - l.x);
+            let diff = targetA - l.a;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            l.a += diff * 0.08;
+        }
+        l.x += Math.cos(l.a)*lSpd; l.y += Math.sin(l.a)*lSpd;
+        enemies.forEach((e, ei) => {
+            if(Math.hypot(l.x-e.x, l.y-e.y) < e.size/2) {
+                let dmg = (l.type === 'relic-silk') ? 300 : (l.type === 'relic-rexo' ? 700 : 120);
+                if(e.type === 'toxico' && e.shield > 0) { 
+                    e.shield -= dmg; 
+                    if(e.shield < 0) { dmg = Math.abs(e.shield); e.shield = 0; } else dmg = 0;
+                }
+                if(e.iceShield) dmg *= 0.3;
+                e.hp -= dmg;
+                pLasers.splice(i, 1);
+                if(e.hp <= 0) { zeks += (e.type.includes('boss') ? 1500 : 200); enemies.splice(ei, 1); }
+                createSpark(l.x, l.y, '#fff');
+            }
+        });
+    });
+
+    particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.life -= 0.02; if(p.life <= 0) particles.splice(i, 1); });
+    if(enemies.length === 0 && !isGameOver && !isIntermission) startIntermission(); 
+    if(player.hp <= 0) { isGameOver = true; document.getElementById('game-over').style.display = 'flex'; }
+    updateUI();
+}
+
+function draw() {
+    update();
+    ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    clouds.forEach(c => {
+        ctx.save(); ctx.globalAlpha = 0.6;
+        ctx.drawImage(IMGS.polvo, c.x - c.size/2, c.y - c.size/2, c.size, c.size);
+        ctx.restore();
+    });
+
+    specials.forEach(s => {
+        if(s.type === 'missile') {
+            ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.a + Math.PI/2);
+            ctx.drawImage(IMGS.misil, -15, -15, 30, 30); ctx.restore();
+        }
+        if(s.type === 'ray') {
+            ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.angle + Math.PI/2);
+            ctx.strokeStyle = '#0ff'; ctx.lineWidth = 40 * (s.life/120);
+            ctx.shadowBlur = 20; ctx.shadowColor = '#0ff';
+            ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0, -1000); ctx.stroke();
+            ctx.restore();
+        }
+    });
+
+    enemies.forEach(e => {
+        ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.angle - Math.PI/2);
+        let imgName = e.type.includes('bossSilk') ? 'silk' : (e.type.includes('bossRexo') ? 'rexo' : e.type);
+        ctx.drawImage(IMGS[imgName], -e.size/2, -e.size/2, e.size, e.size); 
+        ctx.restore();
+        if(e.type === 'bossRexo' && e.iceShield) {
+
+    
+
+    // 🔥 Mucho más separado
+    let shieldSize = e.size * 2.4;
+     let scale = 0.85;
+     let drawSize = shieldSize * scale;
+    ctx.save();
+    ctx.translate(e.x, e.y);
+
+    // Rotación clara
+    ctx.rotate(shieldRotation);
+
+
+    ctx.globalAlpha = 0.95;
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "#00eaff";
+
+    ctx.drawImage(
+        IMGS.hielo,
+        -drawSize / 2,
+        -drawSize / 2,
+        drawSize,
+        drawSize
+    );
+
+    ctx.restore();
+}
+
+
+
+
+        let barW = e.size;
+        ctx.fillStyle = "#222"; ctx.fillRect(e.x - barW/2, e.y - e.size/2 - 15, barW, 6);
+        ctx.fillStyle = (e.type.includes('boss')) ? "#f0f" : "#f00";
+        ctx.fillRect(e.x - barW/2, e.y - e.size/2 - 15, barW * (e.hp / e.max), 6);
+        if(e.type === 'toxico' && e.shield > 0) {
+            ctx.fillStyle = '#0ff'; ctx.fillRect(e.x - barW/2, e.y - e.size/2 - 22, barW * (e.shield / e.maxShield), 4);
+        }
+    });
+
+    bombs.forEach(b => {
+        ctx.save(); let scale = 1 + Math.sin(Date.now()*0.02)*0.2;
+        ctx.translate(b.x, b.y); ctx.scale(scale, scale);
+        ctx.drawImage(IMGS.bomba, -25, -25, 50, 50); ctx.restore();
+    });
+
+    ctx.save();
+ctx.translate(player.x, player.y);
+
+// curación
+if(player.hasBot && Date.now() - player.lastHit > 3000 && player.hp < player.max) {
+    ctx.drawImage(IMGS.curacion, -25, -80 + Math.sin(Date.now()*0.005)*8, 50, 50);
+}
+
+// rotamos jugador primero
+ctx.rotate(player.angle + Math.PI/2);
+
+// dibujar nave
+ctx.drawImage(IMGS[player.type], -45, -45, 90, 90);
+
+// --- ANILLO TITAN ---
+if(titanRing){
+    let elapsed = Date.now() - titanRing.start;
+
+    if(elapsed > titanRing.duration){
+        titanRing = null;
+    } else {
+
+        // 🔥 DAÑO DEL ANILLO
+        for (let i = enemies.length - 1; i >= 0; i--) {
+
+    let enemy = enemies[i];
+
+    let dx = enemy.x - player.x;
+    let dy = enemy.y - player.y;
+    let distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance <= titanRing.radius + enemy.size / 2)
+ {
+
+        enemy.hp -= 2;
+
+        if (enemy.hp < 0) {
+            enemy.hp = 0;
+        }
+
+        if (enemy.hp <= 0) {
+            enemies.splice(i, 1);
+        }
+    }
+}
+
+
+        let progress = 1 - (elapsed / titanRing.duration);
+
+        ctx.save();
+        ctx.globalAlpha = progress;
+        ctx.rotate(Date.now() * 0.005);
+        ctx.strokeStyle = "#ff3300";
+        ctx.lineWidth = 15 * progress;
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = "#ff0000";
+        ctx.beginPath();
+        ctx.arc(0, 0, titanRing.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+
+// invencible
+if(player.isInvincible){ 
+    ctx.save();
+    let pulse = 1 + Math.sin(Date.now() * 0.008) * 0.15;
+    ctx.rotate(Date.now() * 0.002); 
+    ctx.scale(pulse, pulse);
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(IMGS.cupula, -100, -100, 200, 200); 
+    ctx.restore(); 
+}
+
+// congelado
+if(player.isFrozen){
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = "rgba(0, 200, 255, 0.5)";
+    ctx.fillRect(-45, -45, 90, 90);
+}
+
+ctx.restore();
+
+    pLasers.forEach(l => {
+        if(l.type === 'relic-silk') ctx.drawImage(IMGS.balas, l.x-10, l.y-20, 20, 40);
+        else if(l.type === 'relic-rexo') ctx.drawImage(IMGS.blanca, l.x-30, l.y-30, 60, 60);
+        else { ctx.fillStyle = '#0ff'; ctx.fillRect(l.x-2, l.y-7, 4, 15); }
+    });
+
+    eLasers.forEach(l => {
+        ctx.fillStyle = l.type.includes('cryo') ? '#fff' : '#f00';
+        if(l.type.includes('homing') || l.type.includes('sphere')) { ctx.beginPath(); ctx.arc(l.x, l.y, 8, 0, Math.PI*2); ctx.fill(); }
+        else ctx.fillRect(l.x-2, l.y-7, 4, 15);
+    });
+
+    particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 4, 4); });
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(draw);
+}
+
+function updateUI() {
+    document.getElementById('hp-bar').style.width = Math.max(0, (player.hp / player.max * 100)) + "%";
+    const elapsed = Date.now() - player.lastSkill;
+    const progress = Math.min(100, (elapsed / COOLDOWN * 100));
+    const fill = document.getElementById('skill-bar-fill');
+    fill.style.width = progress + "%";
+    if(progress >= 100) {
+        fill.classList.add('skill-ready');
+        if(!skillSoundPlayed) { 
+            playReadySound(); 
+            skillSoundPlayed = true; 
+        }
+    } else { 
+        fill.classList.remove('skill-ready');
+        skillSoundPlayed = false;
+    }
+    document.getElementById('live-zeks-val').innerText = String(Math.floor(zeks));
+    document.getElementById('shop-zeks').innerText = "ZEKS: " + String(Math.floor(zeks));
+    let activeStr = "";
+    if(relics.silk.owned) activeStr += " [RELIQUIA SILK]";
+    if(relics.rexo.owned) activeStr += " [RELIQUIA REXO]";
+    document.getElementById('relics-active').innerText = activeStr;
+}
+
+spawnWave();
+draw();
+</script>
+</body>
+</html>
